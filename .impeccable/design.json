@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T14:35:00+07:00",
+  "title": "Design System: LPD Calculator",
+  "extensions": {
+    "colorMeta": {
+      "evergreen": { "role": "primary", "displayName": "GBC evergreen" },
+      "action-green": { "role": "accent", "displayName": "Accessible action green" },
+      "brand-green": { "role": "accent", "displayName": "Bright brand accent" },
+      "canvas": { "role": "neutral", "displayName": "Workspace canvas" }
+    },
+    "typographyMeta": {
+      "heading": { "displayName": "Parkinsans heading", "purpose": "Page and section headings" },
+      "body": { "displayName": "Onest body", "purpose": "Tables, controls, and explanatory text" }
+    },
+    "shadows": [],
+    "motion": [{ "name": "state-transition", "value": "200ms ease-in-out", "purpose": "Control state changes" }],
+    "breakpoints": [{ "name": "drawer", "value": "1024px" }, { "name": "mobile", "value": "768px" }]
+  },
+  "components": [{
+    "name": "Primary Button",
+    "kind": "button",
+    "refersTo": "button-primary",
+    "description": "Main action in the calculator workspace.",
+    "html": "<button class=\"ds-primary\">Add room</button>",
+    "css": ".ds-primary{background:#397c42;color:#fff;border:0;border-radius:10px;padding:10px 16px;font:600 14px Onest,system-ui,sans-serif}.ds-primary:hover{background:#2e6937}"
+  }],
+  "narrative": {
+    "northStar": "GBC Indonesia calculation workspace",
+    "overview": "A restrained adaptation of GBC Indonesia's current evergreen and green identity for room-by-room numeric work.",
+    "keyCharacteristics": ["Evergreen identity", "Clear three-stage flow", "Readable data tables"],
+    "rules": [{ "name": "Result clarity", "body": "Keep units and comparison context visible.", "section": "components" }],
+    "dos": ["Use green for primary actions."],
+    "donts": ["Do not present reduction as a certification score."]
+  }
+}

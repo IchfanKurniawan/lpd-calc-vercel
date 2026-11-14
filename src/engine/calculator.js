@@ -24,27 +24,13 @@ export function sanitizeNum(v, min = 0, max = 1e9) {
 }
 
 /**
- * Sanitise a string: trim, cap length, escape HTML special chars.
- * Prevents XSS when values are later rendered via textContent (safe),
- * but we escape defensively anyway.
+ * Sanitise a string: trim and cap length.
+ * Values are rendered as React text nodes, so HTML escaping here would
+ * double-encode user input (e.g. "R & D" becoming "R &amp; D").
  */
 export function sanitizeStr(s, maxLen = 200) {
   if (typeof s !== 'string') return '';
-  return s
-    .trim()
-    .slice(0, maxLen)
-    .replace(/[<>&"']/g, (c) =>
-      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])
-    );
-}
-
-/**
- * Strip leading formula-injection characters from CSV cell values.
- * Prevents =CMD(), +, -, @-based CSV injection.
- */
-export function stripFormula(s) {
-  if (typeof s !== 'string') return String(s ?? '');
-  return s.replace(/^[=+\-@\t\r]/, "'$&"); // prefix with ' to neutralise
+  return s.trim().slice(0, maxLen);
 }
 
 // ─── Lookups ─────────────────────────────────────────────────────
@@ -69,6 +55,17 @@ export function getLampWatts(code, lightingDB) {
   if (!code || !lightingDB?.length) return 0;
   const lamp = lightingDB.find((l) => l.code === code);
   return lamp ? sanitizeNum(lamp.watts) : 0;
+}
+
+/**
+ * Number of room rows that currently reference a lamp code.
+ * Used to warn before deleting a lighting system that is still in use.
+ */
+export function countLampUsage(rooms, code) {
+  if (!code || !Array.isArray(rooms)) return 0;
+  return rooms.filter((room) =>
+    Array.isArray(room?.lamps) && room.lamps.some((lamp) => lamp?.code === code)
+  ).length;
 }
 
 // ─── Per-room helpers ─────────────────────────────────────────────
@@ -97,21 +94,50 @@ export function getRoomDesignLPD(room, lightingDB) {
 // ─── Main computation ─────────────────────────────────────────────
 
 /**
+ * A room row is complete when the user has supplied every required field:
+ * room name, typology, room type, a positive area, and at least one selected
+ * lighting system. This same rule drives the row status icons and the
+ * calculation gate, so the UI and the results can never disagree.
+ */
+export function isRoomComplete(room) {
+  if (!room || typeof room !== 'object') return false;
+  const hasSelectedLamp = Array.isArray(room.lamps) && room.lamps.some(
+    (lamp) => lamp && typeof lamp.code === 'string' && lamp.code.trim() !== ''
+  );
+  return Boolean(
+    sanitizeStr(room.roomName) &&
+    sanitizeStr(room.typology) &&
+    sanitizeStr(room.roomType) &&
+    sanitizeNum(room.area) > 0 &&
+    hasSelectedLamp
+  );
+}
+
+/**
  * Compute all three output metrics from current app state.
  *
  * @param {Array} lightingDB  - Array of lamp objects { code, watts, … }
  * @param {Array} rooms       - Array of room objects { typology, roomType, area, lamps }
- * @returns {{ totalArea, lpdBaseline, lpdDesign, reductionPct }}
+ * @returns {{ totalArea, lpdBaseline, lpdDesign, reductionPct, incompleteRoomCount, incompleteArea }}
  */
 export function computeResults(lightingDB, rooms) {
-  // Only rooms with a valid room type and non-zero area contribute
-  const valid = rooms.filter((r) => r.roomType && sanitizeNum(r.area) > 0);
+  const roomsWithArea = rooms.filter((r) => sanitizeNum(r.area) > 0);
+  const valid = roomsWithArea.filter((r) => isRoomComplete(r));
+  const incomplete = roomsWithArea.filter((r) => !isRoomComplete(r));
 
   const totalArea = valid.reduce((s, r) => s + sanitizeNum(r.area), 0);
+  const incompleteArea = incomplete.reduce((s, r) => s + sanitizeNum(r.area), 0);
+  const incompleteRoomCount = incomplete.length;
+  const emptyResult = {
+    totalArea: 0,
+    lpdBaseline: 0,
+    lpdDesign: 0,
+    reductionPct: 0,
+    incompleteRoomCount,
+    incompleteArea,
+  };
 
-  if (totalArea === 0) {
-    return { totalArea: 0, lpdBaseline: 0, lpdDesign: 0, reductionPct: 0 };
-  }
+  if (totalArea === 0) return emptyResult;
 
   // Baseline: area-weighted average of SNI standard LPDs
   const baselineWattArea = valid.reduce((s, r) => {
@@ -119,7 +145,7 @@ export function computeResults(lightingDB, rooms) {
     return s + stdLPD * sanitizeNum(r.area);
   }, 0);
 
-  // Design: sum of all actual lamp watts across all rooms
+  // Design: sum of all actual lamp watts across all complete rooms
   const totalDesignWatts = valid.reduce(
     (s, r) => s + getRoomDesignWatts(r, lightingDB),
     0
@@ -130,5 +156,5 @@ export function computeResults(lightingDB, rooms) {
   const reductionPct =
     lpdBaseline > 0 ? ((lpdBaseline - lpdDesign) / lpdBaseline) * 100 : 0;
 
-  return { totalArea, lpdBaseline, lpdDesign, reductionPct };
+  return { totalArea, lpdBaseline, lpdDesign, reductionPct, incompleteRoomCount, incompleteArea };
 }

@@ -1,10 +1,14 @@
-export function ProgressRing({ value, size = 140, stroke = 12, lang = 'id' }) {
+import STRINGS from '../../data/i18n.js';
+
+const s = STRINGS.en;
+
+export function ProgressRing({ value, size = 140, stroke = 12 }) {
   const r      = (size - stroke) / 2;
   const circ   = 2 * Math.PI * r;
   const clamped = Math.min(Math.abs(value), 100);
   const offset  = circ - (clamped / 100) * circ;
   const isNeg   = value < 0;
-  const label   = lang === 'id' ? 'Reduksi LPD' : 'LPD Reduction';
+  const label   = s.res_reduction;
 
   return (
     <div className="progress-ring-wrap">
@@ -14,7 +18,7 @@ export function ProgressRing({ value, size = 140, stroke = 12, lang = 'id' }) {
         height={size}
         className="progress-ring"
         role="img"
-        aria-label={`${value.toFixed(1)}% LPD Reduction`}
+        aria-label={`${value.toFixed(1)}% ${s.res_reduction}`}
       >
         <circle
           className="progress-ring__track"
@@ -47,7 +51,7 @@ export function ProgressRing({ value, size = 140, stroke = 12, lang = 'id' }) {
           dominantBaseline="central"
           fontSize={10}
         >
-          vs baseline
+          {s.vs_baseline}
         </text>
       </svg>
     </div>

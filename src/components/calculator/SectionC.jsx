@@ -1,12 +1,15 @@
 import { useApp } from '../../store/AppContext.jsx';
 import STRINGS from '../../data/i18n.js';
+import { isRoomComplete } from '../../engine/calculator.js';
 import { ProgressRing } from '../shared/ProgressRing.jsx';
 
+const s = STRINGS.en;
+
 export function SectionC() {
-  const { state, computed } = useApp();
-  const s    = STRINGS[state.language];
-  const lang = state.language;
+  const { computed, state } = useApp();
   const { totalArea, lpdBaseline, lpdDesign, reductionPct } = computed;
+  const incompleteCount = state.rooms.filter((room) => !isRoomComplete(room)).length;
+  const canCalculate = incompleteCount === 0;
 
   return (
     <section className="section-card">
@@ -20,39 +23,46 @@ export function SectionC() {
         </div>
       </div>
 
-      <div className="results-grid">
-        <MetricCard
-          label={s.res_total_area}
-          value={totalArea.toFixed(2)}
-          unit={s.unit_m2}
-          icon="straighten"
-        />
-        <MetricCard
-          label={s.res_baseline}
-          value={lpdBaseline.toFixed(3)}
-          unit={s.unit_wm2}
-          icon="bolt"
-        />
-        <MetricCard
-          label={s.res_design}
-          value={lpdDesign.toFixed(3)}
-          unit={s.unit_wm2}
-          icon="electric_bolt"
-          highlight={lpdBaseline > 0 && lpdDesign < lpdBaseline}
-          warn={lpdBaseline > 0 && lpdDesign > lpdBaseline}
-        />
+      {canCalculate ? (
+        <div className="results-grid">
+          <MetricCard
+            label={s.res_total_area}
+            value={totalArea.toFixed(2)}
+            unit={s.unit_m2}
+            icon="straighten"
+          />
+          <MetricCard
+            label={s.res_baseline}
+            value={lpdBaseline.toFixed(3)}
+            unit={s.unit_wm2}
+            icon="bolt"
+          />
+          <MetricCard
+            label={s.res_design}
+            value={lpdDesign.toFixed(3)}
+            unit={s.unit_wm2}
+            icon="electric_bolt"
+            highlight={lpdBaseline > 0 && lpdDesign < lpdBaseline}
+            warn={lpdBaseline > 0 && lpdDesign > lpdBaseline}
+          />
 
-        <ProgressRing value={reductionPct} size={148} stroke={13} lang={lang} />
-      </div>
+          <ProgressRing value={reductionPct} size={148} stroke={13} />
+        </div>
+      ) : (
+        <div className="results-blocked" role="status">
+          <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+          <p>{s.results_blocked.replace('{count}', String(incompleteCount))}</p>
+        </div>
+      )}
     </section>
   );
 }
 
 function MetricCard({ label, value, unit, icon, highlight, warn }) {
   const borderColor = highlight
-    ? 'rgba(211,254,171,0.6)'
+    ? 'rgba(216,241,221,0.85)'
     : warn
-    ? 'rgba(255,149,0,0.4)'
+    ? 'rgba(164,93,11,0.4)'
     : 'var(--slate-200)';
 
   const valueColor = highlight
@@ -62,9 +72,9 @@ function MetricCard({ label, value, unit, icon, highlight, warn }) {
     : 'var(--jet-gray)';
 
   const bg = highlight
-    ? 'rgba(211,254,171,0.12)'
+    ? 'rgba(216,241,221,0.24)'
     : warn
-    ? 'rgba(255,149,0,0.07)'
+    ? 'rgba(164,93,11,0.07)'
     : 'var(--slate-50)';
 
   return (
@@ -75,6 +85,7 @@ function MetricCard({ label, value, unit, icon, highlight, warn }) {
       <div className="metric-card__label">
         <span
           className="material-symbols-outlined"
+          aria-hidden="true"
           style={{ fontSize: 14, verticalAlign: 'middle', marginRight: 4, color: 'var(--slate-400)' }}
         >
           {icon}

@@ -4,15 +4,15 @@
  * All mutations go through dispatch — no direct state writes.
  */
 
-import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { persist, hydrate, clearStorage } from './localStorage.js';
+import { createContext, useContext, useReducer, useEffect, useRef } from 'react';
+import { persist, hydrate } from './localStorage.js';
 import { computeResults } from '../engine/calculator.js';
+import { createId } from '../engine/id.js';
 
 // ─── Initial state ────────────────────────────────────────────────
 
 const INITIAL_STATE = {
   projectName: '',
-  language: 'id',
   lightingDB: [],
   rooms: [],
 };
@@ -20,11 +20,12 @@ const INITIAL_STATE = {
 // ─── Helpers ──────────────────────────────────────────────────────
 
 function nextLampCode(lightingDB) {
-  return `L${lightingDB.length + 1}`;
-}
-
-function recodeLamps(lamps) {
-  return lamps.map((l, i) => ({ ...l, code: `L${i + 1}` }));
+  let max = 0;
+  for (const lamp of lightingDB) {
+    const match = /^L(\d+)$/.exec(lamp.code);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `L${Math.max(max, lightingDB.length) + 1}`;
 }
 
 // ─── Reducer ─────────────────────────────────────────────────────
@@ -35,12 +36,8 @@ function reducer(state, action) {
     case 'SET_PROJECT_NAME':
       return { ...state, projectName: action.payload };
 
-    case 'SET_LANGUAGE':
-      return { ...state, language: action.payload };
-
     case 'RESET':
-      clearStorage();
-      return { ...INITIAL_STATE };
+      return { ...INITIAL_STATE, projectName: '' };
 
     case 'IMPORT':
       // Replace entire state from import
@@ -77,13 +74,51 @@ function reducer(state, action) {
 
     case 'DELETE_LAMP': {
       const filtered = state.lightingDB.filter((_, i) => i !== action.payload);
-      const recoded  = recodeLamps(filtered);
+      const codeMap = new Map(filtered.map((lamp, index) => [lamp.code, `L${index + 1}`]));
+      const recoded = filtered.map((lamp, index) => ({ ...lamp, code: `L${index + 1}` }));
 
-      // Remove any lamp references in rooms that no longer exist
-      const validCodes = new Set(recoded.map((l) => l.code));
+      // Preserve assignments to surviving lamps while their display codes change.
       const rooms = state.rooms.map((r) => ({
         ...r,
-        lamps: r.lamps.filter((l) => validCodes.has(l.code)),
+        lamps: r.lamps.flatMap((lamp) => {
+          const code = codeMap.get(lamp.code);
+          return code ? [{ ...lamp, code }] : [];
+        }),
+      }));
+
+      return { ...state, lightingDB: recoded, rooms };
+    }
+
+    case 'DUPLICATE_LAMP': {
+      const index = action.payload;
+      const source = state.lightingDB[index];
+      if (!source) return state;
+      const copy = { ...source, code: nextLampCode(state.lightingDB) };
+      const lightingDB = [...state.lightingDB];
+      lightingDB.splice(index + 1, 0, copy);
+      // Recode all to maintain sequential codes
+      const recoded = lightingDB.map((lamp, i) => ({ ...lamp, code: `L${i + 1}` }));
+
+      // Build a map from old codes to new codes for preserving room assignments
+      const oldCodes = state.lightingDB.map((lamp, i) => lamp.code);
+      const newCodes = recoded.map((lamp, i) => lamp.code);
+      const codeMap = new Map();
+      // For lamps before the insertion point, codes stay the same
+      for (let i = 0; i <= index; i++) {
+        codeMap.set(oldCodes[i], newCodes[i]);
+      }
+      // For lamps after the insertion point, their codes shift
+      for (let i = index + 1; i < oldCodes.length; i++) {
+        codeMap.set(oldCodes[i], newCodes[i + 1]);
+      }
+
+      // Preserve assignments to surviving lamps while their display codes change
+      const rooms = state.rooms.map((r) => ({
+        ...r,
+        lamps: r.lamps.map((lamp) => {
+          const newCode = codeMap.get(lamp.code);
+          return newCode ? { ...lamp, code: newCode } : lamp;
+        }),
       }));
 
       return { ...state, lightingDB: recoded, rooms };
@@ -96,7 +131,7 @@ function reducer(state, action) {
         rooms: [
           ...state.rooms,
           {
-            id:       crypto.randomUUID(),
+            id:       createId(),
             roomName: '',
             typology: '',
             roomType: '',
@@ -131,7 +166,12 @@ function reducer(state, action) {
       const src = state.rooms.find((r) => r.id === action.payload);
       if (!src) return state;
       const idx = state.rooms.indexOf(src);
-      const copy = { ...src, id: crypto.randomUUID(), roomName: src.roomName + ' (copy)' };
+      const copy = {
+        ...src,
+        id: createId(),
+        roomName: src.roomName + ' (copy)',
+        lamps: src.lamps.map((lamp) => ({ ...lamp, id: createId() })),
+      };
       const rooms = [...state.rooms];
       rooms.splice(idx + 1, 0, copy);
       return { ...state, rooms };
@@ -149,7 +189,7 @@ function reducer(state, action) {
                 ...r,
                 lamps: [
                   ...r.lamps,
-                  { id: crypto.randomUUID(), code: '', points: 0 },
+                  { id: createId(), code: '', points: 0 },
                 ],
               }
         ),
@@ -195,18 +235,31 @@ function reducer(state, action) {
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const saved  = hydrate();
-  const [state, dispatch] = useReducer(reducer, saved ?? INITIAL_STATE);
+  const hydration = useRef(null);
+  if (hydration.current === null) hydration.current = hydrate();
 
-  // Derived calculation — computed on every render, memoised by the consumer
+  const [state, dispatch] = useReducer(reducer, hydration.current.state ?? INITIAL_STATE);
+  const skipPersist = useRef(Boolean(hydration.current.issue));
+
+  // Derived calculation — recomputed whenever state changes
   const computed = computeResults(state.lightingDB, state.rooms);
 
-  // Persist on every state change
+  // Persist on every state change. The first run is skipped when stored data
+  // was rejected so a refresh does not destroy recoverable user data.
   useEffect(() => {
+    if (skipPersist.current) {
+      skipPersist.current = false;
+      return;
+    }
     persist(state);
   }, [state]);
 
-  const value = { state, dispatch, computed };
+  const value = {
+    state,
+    dispatch,
+    computed,
+    storageIssue: hydration.current.issue,
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

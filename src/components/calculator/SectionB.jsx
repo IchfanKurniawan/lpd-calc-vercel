@@ -1,14 +1,34 @@
 import { useApp } from '../../store/AppContext.jsx';
 import STRINGS from '../../data/i18n.js';
 import SNI_DATABASE from '../../data/sniDatabase.js';
-import { getSNILPD, getRoomDesignLPD } from '../../engine/calculator.js';
+import { getSNILPD, getRoomDesignLPD, isRoomComplete } from '../../engine/calculator.js';
+
+const s = STRINGS.en;
+
+/**
+ * Row-level completeness marker. The native title acts as the hover tooltip
+ * and the aria-label exposes the same message to assistive technology.
+ */
+function RoomStatus({ complete }) {
+  const label = complete ? s.room_status_complete : s.room_status_incomplete;
+  return (
+    <span
+      className={`room-status ${complete ? 'room-status--complete' : 'room-status--incomplete'}`}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <span className="material-symbols-outlined" aria-hidden="true">
+        {complete ? 'check_circle' : 'warning'}
+      </span>
+    </span>
+  );
+}
 
 export function SectionB() {
   const { state, dispatch } = useApp();
-  const s    = STRINGS[state.language];
-  const lang = state.language;
   const { rooms, lightingDB } = state;
-  const shared = { lang, s, lightingDB, dispatch };
+  const shared = { s, lightingDB, dispatch };
 
   return (
     <section className="section-card">
@@ -22,18 +42,16 @@ export function SectionB() {
         </div>
         {rooms.length > 0 && (
           <span style={{ fontSize: 12, color: 'var(--slate-400)' }} className="tabular">
-            {rooms.length} {lang === 'id' ? 'ruang' : 'rooms'}
+            {rooms.length} rooms
           </span>
         )}
       </div>
 
       {lightingDB.length === 0 && rooms.length === 0 && (
         <div className="info-banner">
-          <span className="material-symbols-outlined">info</span>
+          <span className="material-symbols-outlined" aria-hidden="true">info</span>
           <span>
-            {lang === 'id'
-              ? 'Tambahkan jenis lampu di Tabel A terlebih dahulu sebelum mengisi data ruang.'
-              : 'Add lamp types in Table A first before filling in room data.'}
+            Add lamp types in Table A first before filling in room data.
           </span>
         </div>
       )}
@@ -42,7 +60,7 @@ export function SectionB() {
       <div className="room-table-desktop section-card__body">
         {rooms.length === 0 ? (
           <div className="empty-state">
-            <span className="material-symbols-outlined">meeting_room</span>
+            <span className="material-symbols-outlined" aria-hidden="true">meeting_room</span>
             <p>{s.no_rooms_yet}</p>
           </div>
         ) : (
@@ -57,7 +75,7 @@ export function SectionB() {
                 <th style={{ minWidth: 260 }}>{s.col_lamps}</th>
                 <th style={{ width: 100, textAlign: 'right' }}>{s.col_std_lpd}</th>
                 <th style={{ width: 110, textAlign: 'right' }}>{s.col_design_lpd}</th>
-                <th style={{ width: 80 }}></th>
+                <th style={{ width: 96 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -73,7 +91,7 @@ export function SectionB() {
       <div className="room-cards">
         {rooms.length === 0 ? (
           <div className="empty-state">
-            <span className="material-symbols-outlined">meeting_room</span>
+            <span className="material-symbols-outlined" aria-hidden="true">meeting_room</span>
             <p>{s.no_rooms_yet}</p>
           </div>
         ) : (
@@ -85,20 +103,24 @@ export function SectionB() {
 
       <div className="section-card__footer">
         <button className="btn-add-row" onClick={() => dispatch({ type: 'ADD_ROOM' })}>
-          <span className="material-symbols-outlined">add</span>
+          <span className="material-symbols-outlined" aria-hidden="true">add</span>
           {s.add_room}
         </button>
+        <p className="section-note" style={{ marginTop: 8, fontSize: 12, color: 'var(--slate-500)', lineHeight: 1.4 }}>
+          <span className="material-symbols-outlined" aria-hidden="true" style={{ verticalAlign: 'middle', fontSize: 14, marginRight: 4 }}>info</span>
+          Only lamp types with both <strong>Name</strong> and <strong>Power (W)</strong> completed in Table A appear in the Lighting System dropdown.
+        </p>
       </div>
     </section>
   );
 }
 
-function useRoomHelpers(room, lang, lightingDB, dispatch) {
+function useRoomHelpers(room, lightingDB, dispatch) {
   const typologyOptions = Object.entries(SNI_DATABASE).map(([key, val]) => ({
-    key, label: val.label[lang],
+    key, label: val.label.en,
   }));
   const roomOptions = room.typology
-    ? (SNI_DATABASE[room.typology]?.rooms ?? []).map((r) => ({ id: r.id, label: r.label[lang] }))
+    ? (SNI_DATABASE[room.typology]?.rooms ?? []).map((r) => ({ id: r.id, label: r.label.en }))
     : [];
   const stdLPD    = getSNILPD(room.typology, room.roomType);
   const designLPD = getRoomDesignLPD(room, lightingDB);
@@ -112,9 +134,9 @@ function useRoomHelpers(room, lang, lightingDB, dispatch) {
 }
 
 /* ── Desktop Table Row ── */
-function DesktopRow({ room, idx, lang, s, lightingDB, dispatch }) {
+function DesktopRow({ room, idx, s, lightingDB, dispatch }) {
   const { typologyOptions, roomOptions, stdLPD, designLPD, isOver, update } =
-    useRoomHelpers(room, lang, lightingDB, dispatch);
+    useRoomHelpers(room, lightingDB, dispatch);
 
   return (
     <tr className={isOver ? 'row-over-baseline' : ''}>
@@ -126,20 +148,21 @@ function DesktopRow({ room, idx, lang, s, lightingDB, dispatch }) {
       <td>
         <input
           type="text"
+          aria-label={`${s.col_room} ${idx + 1}`}
           value={room.roomName}
           onChange={(e) => update('roomName', e.target.value)}
-          placeholder={lang === 'id' ? 'Nama ruang…' : 'Room name…'}
+          placeholder="Room name…"
           maxLength={200}
         />
       </td>
       <td>
-        <select value={room.typology} onChange={(e) => update('typology', e.target.value)}>
+        <select aria-label={`${s.col_typology} ${idx + 1}`} value={room.typology} onChange={(e) => update('typology', e.target.value)}>
           <option value="">{s.select_typology}</option>
           {typologyOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
       </td>
       <td>
-        <select value={room.roomType} onChange={(e) => update('roomType', e.target.value)} disabled={!room.typology}>
+        <select aria-label={`${s.col_room_type} ${idx + 1}`} value={room.roomType} onChange={(e) => update('roomType', e.target.value)} disabled={!room.typology}>
           <option value="">{s.select_room_type}</option>
           {roomOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
@@ -147,6 +170,7 @@ function DesktopRow({ room, idx, lang, s, lightingDB, dispatch }) {
       <td>
         <input
           type="number" value={room.area || ''} placeholder="0" min="0" step="0.1"
+          aria-label={`${s.col_area} ${idx + 1}`}
           className="tabular" style={{ textAlign: 'right' }}
           onChange={(e) => update('area', Math.max(0, parseFloat(e.target.value) || 0))}
         />
@@ -165,16 +189,19 @@ function DesktopRow({ room, idx, lang, s, lightingDB, dispatch }) {
           : <span style={{ color: 'var(--slate-300)', fontSize: 13 }}>—</span>}
       </td>
       <td>
-        <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+        <div className="row-actions">
+          <RoomStatus complete={isRoomComplete(room)} />
           <button className="btn btn-ghost" style={{ padding: '4px 6px' }}
-            title={lang === 'id' ? 'Duplikat' : 'Duplicate'}
+            title="Duplicate"
+            aria-label={`Duplicate ${room.roomName || idx + 1}`}
             onClick={() => dispatch({ type: 'DUPLICATE_ROOM', payload: room.id })}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>content_copy</span>
+            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 15 }}>content_copy</span>
           </button>
           <button className="btn btn-danger" style={{ padding: '4px 6px' }}
-            title={lang === 'id' ? 'Hapus' : 'Delete'}
+            title="Delete"
+            aria-label={`Delete ${room.roomName || idx + 1}`}
             onClick={() => dispatch({ type: 'DELETE_ROOM', payload: room.id })}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+            <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 15 }}>delete</span>
           </button>
         </div>
       </td>
@@ -183,38 +210,42 @@ function DesktopRow({ room, idx, lang, s, lightingDB, dispatch }) {
 }
 
 /* ── Mobile Card ── */
-function MobileCard({ room, idx, lang, s, lightingDB, dispatch }) {
+function MobileCard({ room, idx, s, lightingDB, dispatch }) {
   const { typologyOptions, roomOptions, stdLPD, designLPD, isOver, update } =
-    useRoomHelpers(room, lang, lightingDB, dispatch);
+    useRoomHelpers(room, lightingDB, dispatch);
 
   return (
     <div className="room-card">
       <div className="room-card__header">
         <span className="room-card__num">{idx + 1}</span>
         <input className="room-card__name-input" type="text" value={room.roomName}
+          aria-label={`${s.col_room} ${idx + 1}`}
           onChange={(e) => update('roomName', e.target.value)}
-          placeholder={lang === 'id' ? 'Nama ruang…' : 'Room name…'} maxLength={200} />
+          placeholder="Room name…" maxLength={200} />
+        <RoomStatus complete={isRoomComplete(room)} />
         <button className="btn btn-ghost" style={{ padding: '4px 6px' }}
+          aria-label={`Duplicate ${room.roomName || idx + 1}`}
           onClick={() => dispatch({ type: 'DUPLICATE_ROOM', payload: room.id })}>
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>content_copy</span>
+          <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 16 }}>content_copy</span>
         </button>
         <button className="btn btn-danger" style={{ padding: '4px 6px' }}
+          aria-label={`Delete ${room.roomName || idx + 1}`}
           onClick={() => dispatch({ type: 'DELETE_ROOM', payload: room.id })}>
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+          <span className="material-symbols-outlined" aria-hidden="true" style={{ fontSize: 16 }}>delete</span>
         </button>
       </div>
 
       <div className="room-card__grid">
         <div className="room-card__field" style={{ gridColumn: '1 / -1' }}>
           <label>{s.col_typology}</label>
-          <select value={room.typology} onChange={(e) => update('typology', e.target.value)}>
+          <select aria-label={`${s.col_typology} ${idx + 1}`} value={room.typology} onChange={(e) => update('typology', e.target.value)}>
             <option value="">{s.select_typology}</option>
             {typologyOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
         </div>
         <div className="room-card__field" style={{ gridColumn: '1 / -1' }}>
           <label>{s.col_room_type}</label>
-          <select value={room.roomType} onChange={(e) => update('roomType', e.target.value)} disabled={!room.typology}>
+          <select aria-label={`${s.col_room_type} ${idx + 1}`} value={room.roomType} onChange={(e) => update('roomType', e.target.value)} disabled={!room.typology}>
             <option value="">{s.select_room_type}</option>
             {roomOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
@@ -222,6 +253,7 @@ function MobileCard({ room, idx, lang, s, lightingDB, dispatch }) {
         <div className="room-card__field">
           <label>{s.col_area}</label>
           <input type="number" value={room.area || ''} placeholder="0" min="0" step="0.1"
+            aria-label={`${s.col_area} ${idx + 1}`}
             className="tabular" style={{ textAlign: 'right' }}
             onChange={(e) => update('area', Math.max(0, parseFloat(e.target.value) || 0))} />
         </div>
@@ -229,7 +261,7 @@ function MobileCard({ room, idx, lang, s, lightingDB, dispatch }) {
 
       <div>
         <div className="room-card__lamps-header">
-          <span>{lang === 'id' ? 'Sistem Lighting' : 'Lighting System'}</span>
+          <span>Lighting System</span>
         </div>
         <div style={{ marginTop: 8 }}>
           <LampSlots room={room} s={s} lightingDB={lightingDB} dispatch={dispatch} />
@@ -246,7 +278,7 @@ function MobileCard({ room, idx, lang, s, lightingDB, dispatch }) {
           )}
           {room.area > 0 && room.lamps.length > 0 && (
             <div className="room-card__lpd-item"
-              style={{ borderColor: isOver ? 'rgba(255,149,0,0.4)' : 'var(--slate-200)' }}>
+              style={{ borderColor: isOver ? 'rgba(164,93,11,0.4)' : 'var(--slate-200)' }}>
               <label>{s.col_design_lpd}</label>
               <span className="tabular" style={{ color: isOver ? 'var(--amber)' : 'var(--deep-teal)' }}>
                 {designLPD.toFixed(2)}
@@ -262,39 +294,59 @@ function MobileCard({ room, idx, lang, s, lightingDB, dispatch }) {
 /* ── Lamp Slots (shared) ── */
 const LABELS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
 
+/** Check if a lamp has complete data (name + watts > 0) */
+function isLampComplete(lamp) {
+  return lamp.name && lamp.name.trim() !== '' && lamp.watts && lamp.watts > 0;
+}
+
 function LampSlots({ room, s, lightingDB, dispatch }) {
+  const referencedCodes = new Set(room.lamps.map((lamp) => lamp.code).filter(Boolean));
+  const completeLamps = lightingDB.filter(isLampComplete);
+  const selectableLamps = lightingDB.filter(
+    (lamp) => isLampComplete(lamp) || referencedCodes.has(lamp.code)
+  );
+
   if (lightingDB.length === 0) {
     return <p style={{ fontSize: 11, color: 'var(--slate-400)', fontStyle: 'italic' }}>{s.fill_lamp_first}</p>;
   }
 
   return (
     <div className="lamp-slots">
+      {completeLamps.length === 0 && (
+        <p style={{ fontSize: 11, color: 'var(--slate-500)', fontStyle: 'italic' }}>
+          {s.no_complete_lamps}
+        </p>
+      )}
       {room.lamps.map((lamp, i) => (
         <div key={lamp.id} className="lamp-slot">
           <span className="lamp-slot__badge">{LABELS[i] ?? i + 1}</span>
           <select
+            aria-label={`${s.col_lamps} ${i + 1}`}
             value={lamp.code}
             onChange={(e) => dispatch({ type: 'UPDATE_ROOM_LAMP', payload: { roomId: room.id, lampId: lamp.id, field: 'code', value: e.target.value } })}
           >
             <option value="">{s.select_lamp}</option>
-            {lightingDB.map((l) => (
-              <option key={l.code} value={l.code}>{l.code}{l.name ? ` – ${l.name}` : ''}</option>
+            {selectableLamps.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.code}{l.name ? ` – ${l.name}` : ''}{isLampComplete(l) ? '' : ` (${s.incomplete})`}
+              </option>
             ))}
           </select>
           <input
+            aria-label={`Number of points ${i + 1}`}
             type="number" value={lamp.points || ''} placeholder="0" min="0" className="tabular"
             onChange={(e) => dispatch({ type: 'UPDATE_ROOM_LAMP', payload: { roomId: room.id, lampId: lamp.id, field: 'points', value: Math.max(0, parseInt(e.target.value) || 0) } })}
           />
           <button className="btn-remove-lamp"
             onClick={() => dispatch({ type: 'DELETE_ROOM_LAMP', payload: { roomId: room.id, lampId: lamp.id } })}
-            aria-label="Remove lamp">
-            <span className="material-symbols-outlined">close</span>
+            aria-label={`Remove lamp ${i + 1}`}>
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
       ))}
       <button className="btn-add-lamp-slot"
         onClick={() => dispatch({ type: 'ADD_ROOM_LAMP', payload: room.id })}>
-        <span className="material-symbols-outlined">add</span>
+        <span className="material-symbols-outlined" aria-hidden="true">add</span>
         {s.add_lamp_room}
       </button>
     </div>
