@@ -55,8 +55,8 @@
   --transition: 200ms ease-in-out;
 
   /* Z-index layers */
-  --z-sidebar:  100;
-  --z-topbar:   200;
+  --z-sidebar:  200;
+  --z-topbar:   100;
   --z-overlay:  300;
   --z-toast:    400;
   --z-modal:    500;
@@ -118,12 +118,24 @@ input:focus, select:focus, textarea:focus {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
+  grid-template-rows: 1fr var(--footer-h);
   grid-template-areas:
-    "sidebar topbar"
     "sidebar main"
     "sidebar footer";
   min-height: 100dvh;
+}
+
+/* Main content area - topbar is now inside this, so it scrolls horizontally with content */
+.main-content {
+  grid-area: main;
+  margin-left: 0;
+  padding: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Allow horizontal scrolling to flow through to topbar */
+  overflow-x: auto;
 }
 
 /* ── Sidebar ────────────────────────────────────────────────────── */
@@ -267,7 +279,6 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Top Bar ────────────────────────────────────────────────────── */
 .topbar {
-  grid-area: topbar;
   position: sticky;
   top: 0;
   background: rgba(246,248,244,0.85);
@@ -280,7 +291,10 @@ input:focus, select:focus, textarea:focus {
   padding: 0 var(--gutter);
   z-index: var(--z-topbar);
   height: var(--topbar-h);
-  margin-left: 0;
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .topbar__project {
@@ -464,6 +478,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 0;
+  padding: var(--gutter);
+  box-sizing: border-box;
 }
 
 /* ── Active section breadcrumb pill in topbar ───────────────────── */
@@ -949,8 +965,8 @@ input[type=number] { -moz-appearance: textfield; }
   /* Single-column grid — sidebar no longer occupies a column */
   .app-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: 1fr var(--footer-h);
     grid-template-areas:
-      "topbar"
       "main"
       "footer";
   }
@@ -965,8 +981,8 @@ input[type=number] { -moz-appearance: textfield; }
   }
 
   /* Tighten padding for tablet */
-  .topbar       { padding: 0 20px; }
-  .main-content { padding: 20px; }
+  .topbar         { padding: 0 20px; }
+  .content-center { padding: 20px; }
 
   /* Show hamburger button */
   .hamburger { display: flex; }
@@ -974,7 +990,7 @@ input[type=number] { -moz-appearance: textfield; }
 
 /* ── Large mobile (≤768px) ── */
 @media (max-width: 768px) {
-  .main-content { padding: 16px; }
+  .content-center { padding: 16px; }
   .results-grid { grid-template-columns: 1fr 1fr; }
   .progress-ring-wrap { grid-column: 1 / -1; }
   .topbar__badge        { display: none; }
@@ -983,7 +999,7 @@ input[type=number] { -moz-appearance: textfield; }
 
 /* ── Small mobile (≤480px) ── */
 @media (max-width: 480px) {
-  .main-content { padding: 12px; }
+  .content-center { padding: 12px; }
   .results-grid { grid-template-columns: 1fr; }
   .topbar { padding: 0 12px; gap: 8px; }
   .topbar__actions .btn span:not(.material-symbols-outlined) { display: none; }

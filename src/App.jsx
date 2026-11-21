@@ -90,15 +90,14 @@ export default function App() {
         onTabChange={handleTabChange}
       />
 
-      <TopNavBar
-        onHamburger={() => setSidebarOpen((v) => !v)}
-        sidebarOpen={sidebarOpen}
-        onImportRequest={setImportPending}
-        activeTab={activeTab}
-        s={s}
-      />
-
       <main className="main-content">
+        <TopNavBar
+          onHamburger={() => setSidebarOpen((v) => !v)}
+          sidebarOpen={sidebarOpen}
+          onImportRequest={setImportPending}
+          activeTab={activeTab}
+          s={s}
+        />
         <div className="content-center">
 
           <div className="workspace-heading">
